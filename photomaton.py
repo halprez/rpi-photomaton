@@ -287,7 +287,7 @@ class PhotoboothGUI:
             if self.printer_name and self.conn:
                 text = self.font_small.render("¡Tu foto está siendo impresa!", True, WHITE)
             else:
-                text = self.font_small.render("¡Tu foto ha sido guardada!", True, WHITE)
+                text = self.font_small.render("¡Gracias!", True, WHITE)
                 
             text_rect = text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT - 50))
             
@@ -346,13 +346,13 @@ class PhotoboothGUI:
                         # Para pruebas: simular inserción de moneda con la tecla espacio
                         elif event.key == pygame.K_SPACE and self.current_state == "waiting_coin":
                             self.current_state = "countdown"
-                            self.countdown_value = 5
+                            self.countdown_value = COUNTDOWN_TIME
                 
                 # Actualizar estado
                 if self.current_state == "countdown":
                     self.update_countdown()
                 elif self.current_state == "show_photo":
-                    # Mostrar la foto durante 5 segundos
+                    # Mostrar la foto durante X segundos
                     current_time = pygame.time.get_ticks()
                     if not hasattr(self, 'photo_display_start'):
                         self.photo_display_start = current_time
