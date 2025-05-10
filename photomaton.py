@@ -22,6 +22,12 @@ import threading
 PICTURE_BORDER_SIZE = 50
 PICTURE_BORDER_COLOR='white'
 
+COUNTDOWN_TIME = 10  # Tiempo de cuenta regresiva en segundos
+
+# Messages
+SCREEN_TITTLE = ">> Nila's Photomat <<"
+SCREEN_SUBTITLE = "Insert 1€ to take a photo"
+
 # Configuración GPIO
 COIN_PIN = 17  # El pin GPIO donde está conectado el detector de monedas
 LED_PIN = 27   # Pin para un LED opcional
@@ -74,8 +80,7 @@ class PhotoboothGUI:
         # Variables de estado
         self.running = True
         self.current_state = "waiting_coin"  # Estados: waiting_coin, countdown, show_photo
-        self.countdown_value = 5
-        self.last_photo = None
+        self.countdown_value = COUNTDOWN_TIME
         
         # Configuración de impresora
         self.printer_name = None
@@ -160,7 +165,7 @@ class PhotoboothGUI:
         image = ImageEnhance.Color(image).enhance(1.2)
         
         # Añadir un borde 
-        image = ImageOps.expand(image, border=PICTURE_BORDER_SIZE, fill=PICTURE_BODER_COLOR)
+        image = ImageOps.expand(image, border=PICTURE_BORDER_SIZE, fill=PICTURE_BORDER_COLOR)
         
         # Guardar imagen modificada
         print(f"Foto guardada como {filepath}")
@@ -224,8 +229,8 @@ class PhotoboothGUI:
             self.screen.blit(dark_overlay, (0, 0))
         
         # Texto principal
-        text1 = self.font_large.render("-- Nila's Photomat --", True, WHITE)
-        text2 = self.font_medium.render("Insert 1€ to take a photo", True, WHITE)
+        text1 = self.font_large.render(SCREEN_TITTLE, True, WHITE)
+        text2 = self.font_medium.render(SCREEN_SUBTITLE, True, WHITE)
         
         # Centrar texto
         text1_rect = text1.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 50))
@@ -236,7 +241,7 @@ class PhotoboothGUI:
             glow_rect = text1_rect.copy()
             glow_rect.x += offset
             glow_rect.y += offset
-            text_glow = self.font_large.render("-- Nila's Photomat --", True, BLUE)
+            text_glow = self.font_large.render(SCREEN_TITTLE, True, BLUE)
             self.screen.blit(text_glow, glow_rect)
         
         self.screen.blit(text1, text1_rect)
@@ -260,9 +265,9 @@ class PhotoboothGUI:
         self.screen.blit(text, text_rect)
         
         # Texto preparativo
-        if self.countdown_value > 3:
+        if self.countdown_value > COUNTDOWN_TIME / 2:
             prep_text = "Mira al pajarito!"
-        elif self.countdown_value > 1:
+        elif self.countdown_value > COUNTDOWN_TIME / 4:
             prep_text = "SONRÍE!"
         else:
             prep_text = "¡FOTO!"
