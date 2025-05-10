@@ -25,7 +25,7 @@ PICTURE_BORDER_COLOR='white'
 COUNTDOWN_TIME = 10  # Tiempo de cuenta regresiva en segundos
 
 # Messages
-SCREEN_TITTLE = ">> Nila's Photomat <<"
+SCREEN_TITTLE = ">> Nila's Photo booth <<"
 SCREEN_SUBTITLE = "Insert 1€ to take a photo"
 
 # Configuración GPIO
@@ -208,7 +208,7 @@ class PhotoboothGUI:
                 print("¡Moneda detectada!")
                 GPIO.output(LED_PIN, GPIO.HIGH)  # Encender LED
                 self.current_state = "countdown"
-                self.countdown_value = 5
+                self.countdown_value = COUNTDOWN_TIME
                 # Esperar un momento para evitar rebotes
                 time.sleep(0.2)
                 GPIO.output(LED_PIN, GPIO.LOW)  # Apagar LED
