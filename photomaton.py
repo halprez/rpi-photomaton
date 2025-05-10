@@ -236,7 +236,7 @@ class PhotoboothGUI:
             glow_rect = text1_rect.copy()
             glow_rect.x += offset
             glow_rect.y += offset
-            text_glow = self.font_large.render("INSERTAR 1 EURO", True, BLUE)
+            text_glow = self.font_large.render("-- Nila's Photomat --", True, BLUE)
             self.screen.blit(text_glow, glow_rect)
         
         self.screen.blit(text1, text1_rect)
