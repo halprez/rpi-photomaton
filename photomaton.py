@@ -26,8 +26,9 @@ PICTURE_BORDER_COLOR='white'
 COUNTDOWN_TIME = 10  # Tiempo de cuenta regresiva en segundos
 
 # Messages
-SCREEN_TITTLE = ">> Nila's Photo booth <<"
-SCREEN_SUBTITLE = "Insert 1€ to take a photo"
+SCREEN_TITTLE = "Insert 1€"
+SCREEN_SUBTITLE = "to take a photo"
+FRAME_TITTLE = "^^ Nila's Photo booth ^^"
 
 # Configuración GPIO
 COIN_PIN = 17  # El pin GPIO donde está conectado el detector de monedas
@@ -40,7 +41,7 @@ FULLSCREEN = True  # Cambiar a False para modo ventana durante desarrollo
 
 # Configuración del marco
 FRAME_ENABLED = True
-FRAME_THICKNESS = 80  # Grosor del marco en píxeles
+FRAME_THICKNESS = 60  # Grosor del marco en píxeles
 FRAME_COLOR = (50, 50, 50)  # Color del marco (gris oscuro)
 FRAME_INNER_COLOR = (20, 20, 20)  # Color del borde interior (casi negro)
 FRAME_INNER_THICKNESS = 5  # Grosor del borde interior
@@ -173,7 +174,7 @@ class PhotoboothGUI:
         pygame.draw.rect(self.screen, FRAME_INNER_COLOR, interior_rect, FRAME_INNER_THICKNESS)
                         
         # Añadir decoración al marco - texto en la parte superior
-        logo_text = self.font_small.render(SCREEN_TITTLE, True, WHITE)
+        logo_text = self.font_small.render(FRAME_TITTLE, True, WHITE)
         self.screen.blit(logo_text, (SCREEN_WIDTH//2 - logo_text.get_width()//2, FRAME_THICKNESS//2 - logo_text.get_height()//2))
     
     def connect_camera(self):
