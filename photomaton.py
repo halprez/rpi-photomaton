@@ -224,12 +224,10 @@ class PhotoboothGUI:
             self.screen.blit(dark_overlay, (0, 0))
         
         # Texto principal
-        tittle = self.font_large.render("FOTOMATON DE NILA", True, WHITE)
-        text1 = self.font_large.render("INSERTAR 1 EURO", True, WHITE)
-        text2 = self.font_medium.render("PARA SACAR UNA FOTO", True, WHITE)
+        text1 = self.font_large.render("-- Nila's Photomat --", True, WHITE)
+        text2 = self.font_medium.render("Insert 1€ to take a photo", True, WHITE)
         
         # Centrar texto
-        tittle_rect = tittle.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 50))
         text1_rect = text1.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 50))
         text2_rect = text2.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 50))
         
@@ -241,7 +239,6 @@ class PhotoboothGUI:
             text_glow = self.font_large.render("INSERTAR 1 EURO", True, BLUE)
             self.screen.blit(text_glow, glow_rect)
         
-        self.screen.blit(tittle, tittle_rect)
         self.screen.blit(text1, text1_rect)
         self.screen.blit(text2, text2_rect)
     
