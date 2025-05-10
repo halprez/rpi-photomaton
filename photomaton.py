@@ -23,6 +23,10 @@ import threading
 PICTURE_BORDER_SIZE = 50
 PICTURE_BORDER_COLOR='white'
 
+BLINK_ENABLED = True  # Activar/desactivar efecto intermitente
+BLINK_SPEED = 500     # Velocidad de parpadeo en milisegundos (500 = medio segundo)
+
+
 COUNTDOWN_TIME = 10  # Tiempo de cuenta regresiva en segundos
 
 # Messages
@@ -93,6 +97,11 @@ class PhotoboothGUI:
         self.current_state = "waiting_coin"  # Estados: waiting_coin, countdown, show_photo
         self.countdown_value = COUNTDOWN_TIME
         self.last_photo = None
+
+        # Para el efecto de parpadeo
+        self.blink_visible = True
+        self.last_blink_time = pygame.time.get_ticks()
+        
         
         # Configuración de impresora
         self.printer_name = None
@@ -319,8 +328,18 @@ class PhotoboothGUI:
             self.screen.blit(text_glow, glow_rect)
         
         self.screen.blit(text1, text1_rect)
-        self.screen.blit(text2, text2_rect)
+         # Controlar la intermitencia del texto secundario
+        current_time = pygame.time.get_ticks()
+        if current_time - self.last_blink_time >= BLINK_SPEED:
+            self.blink_visible = not self.blink_visible
+            self.last_blink_time = current_time
         
+        # Solo mostrar el texto "Insert coin" si está visible en el ciclo de parpadeo o si el parpadeo está desactivado
+        if self.blink_visible or not BLINK_ENABLED:
+            text2 = self.font_medium.render(SCREEN_SUBTITLE, True, WHITE)
+            text2_rect = text2.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 50))
+            self.screen.blit(text2, text2_rect)
+            
         # Dibujar el marco por encima de todo
         self.draw_frame()
     
