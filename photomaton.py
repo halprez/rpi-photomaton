@@ -18,6 +18,7 @@ from PIL import Image, ImageEnhance, ImageOps
 import cups
 import numpy as np
 import threading
+
 # Borde de foto
 PICTURE_BORDER_SIZE = 50
 PICTURE_BORDER_COLOR='white'
@@ -36,6 +37,15 @@ LED_PIN = 27   # Pin para un LED opcional
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 FULLSCREEN = True  # Cambiar a False para modo ventana durante desarrollo
+
+# Configuración del marco
+FRAME_ENABLED = True
+FRAME_THICKNESS = 80  # Grosor del marco en píxeles
+FRAME_COLOR = (50, 50, 50)  # Color del marco (gris oscuro)
+FRAME_INNER_COLOR = (20, 20, 20)  # Color del borde interior (casi negro)
+FRAME_INNER_THICKNESS = 5  # Grosor del borde interior
+FRAME_ROUNDED = True  # Si quieres que el marco tenga esquinas redondeadas
+FRAME_CORNER_RADIUS = 20  # Radio de las esquinas redondeadas (si FRAME_ROUNDED es True)
 
 # Configuración de colores
 WHITE = (255, 255, 255)
@@ -81,6 +91,7 @@ class PhotoboothGUI:
         self.running = True
         self.current_state = "waiting_coin"  # Estados: waiting_coin, countdown, show_photo
         self.countdown_value = COUNTDOWN_TIME
+        self.last_photo = None
         
         # Configuración de impresora
         self.printer_name = None
@@ -103,6 +114,67 @@ class PhotoboothGUI:
         self.coin_thread = threading.Thread(target=self.coin_detection_loop)
         self.coin_thread.daemon = True
         self.coin_thread.start()
+    
+    def draw_frame(self):
+        """Dibuja un marco decorativo alrededor de la pantalla."""
+        if not FRAME_ENABLED:
+            return
+        
+        # Área interior del marco (el espacio donde se muestra el contenido)
+        interior_rect = pygame.Rect(
+            FRAME_THICKNESS, 
+            FRAME_THICKNESS, 
+            SCREEN_WIDTH - 2 * FRAME_THICKNESS, 
+            SCREEN_HEIGHT - 2 * FRAME_THICKNESS
+        )
+        
+        # Dibuja el marco exterior (cubre toda la pantalla)
+        if FRAME_ROUNDED:
+            # Para marco con esquinas redondeadas, dibujamos rectángulos y círculos
+            # Marco superior
+            pygame.draw.rect(self.screen, FRAME_COLOR, 
+                            (FRAME_CORNER_RADIUS, 0, 
+                            SCREEN_WIDTH - 2 * FRAME_CORNER_RADIUS, FRAME_THICKNESS))
+            # Marco inferior
+            pygame.draw.rect(self.screen, FRAME_COLOR, 
+                            (FRAME_CORNER_RADIUS, SCREEN_HEIGHT - FRAME_THICKNESS, 
+                            SCREEN_WIDTH - 2 * FRAME_CORNER_RADIUS, FRAME_THICKNESS))
+            # Marco izquierdo
+            pygame.draw.rect(self.screen, FRAME_COLOR, 
+                            (0, FRAME_CORNER_RADIUS, 
+                            FRAME_THICKNESS, SCREEN_HEIGHT - 2 * FRAME_CORNER_RADIUS))
+            # Marco derecho
+            pygame.draw.rect(self.screen, FRAME_COLOR, 
+                            (SCREEN_WIDTH - FRAME_THICKNESS, FRAME_CORNER_RADIUS, 
+                            FRAME_THICKNESS, SCREEN_HEIGHT - 2 * FRAME_CORNER_RADIUS))
+            
+            # Esquinas redondeadas (círculos en las 4 esquinas)
+            # Esquina superior izquierda
+            pygame.draw.circle(self.screen, FRAME_COLOR, 
+                            (FRAME_CORNER_RADIUS, FRAME_CORNER_RADIUS), FRAME_CORNER_RADIUS)
+            # Esquina superior derecha
+            pygame.draw.circle(self.screen, FRAME_COLOR, 
+                            (SCREEN_WIDTH - FRAME_CORNER_RADIUS, FRAME_CORNER_RADIUS), FRAME_CORNER_RADIUS)
+            # Esquina inferior izquierda
+            pygame.draw.circle(self.screen, FRAME_COLOR, 
+                            (FRAME_CORNER_RADIUS, SCREEN_HEIGHT - FRAME_CORNER_RADIUS), FRAME_CORNER_RADIUS)
+            # Esquina inferior derecha
+            pygame.draw.circle(self.screen, FRAME_COLOR, 
+                            (SCREEN_WIDTH - FRAME_CORNER_RADIUS, SCREEN_HEIGHT - FRAME_CORNER_RADIUS), FRAME_CORNER_RADIUS)
+        else:
+            # Marco simple sin esquinas redondeadas
+            pygame.draw.rect(self.screen, FRAME_COLOR, (0, 0, SCREEN_WIDTH, FRAME_THICKNESS))  # Superior
+            pygame.draw.rect(self.screen, FRAME_COLOR, (0, SCREEN_HEIGHT - FRAME_THICKNESS, SCREEN_WIDTH, FRAME_THICKNESS))  # Inferior
+            pygame.draw.rect(self.screen, FRAME_COLOR, (0, 0, FRAME_THICKNESS, SCREEN_HEIGHT))  # Izquierdo
+            pygame.draw.rect(self.screen, FRAME_COLOR, (SCREEN_WIDTH - FRAME_THICKNESS, 0, FRAME_THICKNESS, SCREEN_HEIGHT))  # Derecho
+        
+        # Dibuja el borde interior (para dar efecto de profundidad)
+        # Esto crea una línea fina alrededor del área interior
+        pygame.draw.rect(self.screen, FRAME_INNER_COLOR, interior_rect, FRAME_INNER_THICKNESS)
+                        
+        # Añadir decoración al marco - texto en la parte superior
+        logo_text = self.font_small.render(SCREEN_TITTLE, True, WHITE)
+        self.screen.blit(logo_text, (SCREEN_WIDTH//2 - logo_text.get_width()//2, FRAME_THICKNESS//2 - logo_text.get_height()//2))
     
     def connect_camera(self):
         """Conecta a la webcam."""
@@ -168,6 +240,7 @@ class PhotoboothGUI:
         image = ImageOps.expand(image, border=PICTURE_BORDER_SIZE, fill=PICTURE_BORDER_COLOR)
         
         # Guardar imagen modificada
+        image.save(filepath)
         print(f"Foto guardada como {filepath}")
         
         # Convertir la imagen para mostrarla en pygame
@@ -246,6 +319,9 @@ class PhotoboothGUI:
         
         self.screen.blit(text1, text1_rect)
         self.screen.blit(text2, text2_rect)
+        
+        # Dibujar el marco por encima de todo
+        self.draw_frame()
     
     def draw_countdown_screen(self):
         """Dibuja la pantalla de cuenta regresiva."""
@@ -275,6 +351,9 @@ class PhotoboothGUI:
         prep_render = self.font_medium.render(prep_text, True, WHITE)
         prep_rect = prep_render.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 150))
         self.screen.blit(prep_render, prep_rect)
+        
+        # Dibujar el marco por encima de todo
+        self.draw_frame()
     
     def draw_photo_screen(self):
         """Dibuja la pantalla con la foto tomada."""
@@ -296,6 +375,9 @@ class PhotoboothGUI:
             text_bg.fill((0, 0, 0, 180))
             self.screen.blit(text_bg, (text_rect.x - 10, text_rect.y - 5))
             self.screen.blit(text, text_rect)
+        
+        # Dibujar el marco por encima de todo
+        self.draw_frame()
     
     def update_countdown(self):
         """Actualiza el valor de la cuenta regresiva."""
