@@ -18,6 +18,9 @@ from PIL import Image, ImageEnhance, ImageOps
 import cups
 import numpy as np
 import threading
+# Borde de foto
+PICTURE_BORDER_SIZE = 50
+PICTURE_BORDER_COLOR='white'
 
 # Configuración GPIO
 COIN_PIN = 17  # El pin GPIO donde está conectado el detector de monedas
@@ -75,16 +78,21 @@ class PhotoboothGUI:
         self.last_photo = None
         
         # Configuración de impresora
-        self.conn = cups.Connection()
-        self.printers = self.conn.getPrinters()
         self.printer_name = None
-        
-        # Si hay impresoras disponibles, usar la primera
-        if self.printers:
-            self.printer_name = list(self.printers.keys())[0]
-            print(f"Impresora encontrada: {self.printer_name}")
-        else:
-            print("No se encontraron impresoras. Las fotos se guardarán pero no se imprimirán.")
+        try:
+            self.conn = cups.Connection()
+            self.printers = self.conn.getPrinters()
+            
+            # Si hay impresoras disponibles, usar la primera
+            if self.printers:
+                self.printer_name = list(self.printers.keys())[0]
+                print(f"Impresora encontrada: {self.printer_name}")
+            else:
+                print("No se encontraron impresoras. Las fotos se guardarán pero no se imprimirán.")
+        except Exception as e:
+            print(f"Error al conectar con CUPS: {e}")
+            print("El sistema de impresión no está disponible. Las fotos se guardarán pero no se imprimirán.")
+            self.conn = None
         
         # Crear un thread para la detección de monedas
         self.coin_thread = threading.Thread(target=self.coin_detection_loop)
@@ -152,10 +160,9 @@ class PhotoboothGUI:
         image = ImageEnhance.Color(image).enhance(1.2)
         
         # Añadir un borde 
-        image = ImageOps.expand(image, border=50, fill='white')
+        image = ImageOps.expand(image, border=PICTURE_BORDER_SIZE, fill=PICTURE_BODER_COLOR)
         
         # Guardar imagen modificada
-        image.save(filepath)
         print(f"Foto guardada como {filepath}")
         
         # Convertir la imagen para mostrarla en pygame
@@ -167,8 +174,8 @@ class PhotoboothGUI:
     
     def print_photo(self, filepath):
         """Envía la foto a la impresora en un hilo separado."""
-        if not self.printer_name:
-            print("No hay impresora configurada.")
+        if not self.printer_name or not self.conn:
+            print("Sistema de impresión no disponible. La foto se guardará sin imprimir.")
             return False
         
         def print_job():
@@ -217,10 +224,12 @@ class PhotoboothGUI:
             self.screen.blit(dark_overlay, (0, 0))
         
         # Texto principal
-        text1 = self.font_large.render("INSERT COIN", True, WHITE)
-        text2 = self.font_medium.render("TO TAKE A PHOTO", True, WHITE)
+        tittle = self.font_large.render("FOTOMATON DE NILA", True, WHITE)
+        text1 = self.font_large.render("INSERTAR 1 EURO", True, WHITE)
+        text2 = self.font_medium.render("PARA SACAR UNA FOTO", True, WHITE)
         
         # Centrar texto
+        tittle_rect = tittle.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 50))
         text1_rect = text1.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 50))
         text2_rect = text2.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 50))
         
@@ -229,9 +238,10 @@ class PhotoboothGUI:
             glow_rect = text1_rect.copy()
             glow_rect.x += offset
             glow_rect.y += offset
-            text_glow = self.font_large.render("INSERT COIN", True, BLUE)
+            text_glow = self.font_large.render("INSERTAR 1 EURO", True, BLUE)
             self.screen.blit(text_glow, glow_rect)
         
+        self.screen.blit(tittle, tittle_rect)
         self.screen.blit(text1, text1_rect)
         self.screen.blit(text2, text2_rect)
     
@@ -254,9 +264,9 @@ class PhotoboothGUI:
         
         # Texto preparativo
         if self.countdown_value > 3:
-            prep_text = "PREPÁRATE"
+            prep_text = "Mira al pajarito!"
         elif self.countdown_value > 1:
-            prep_text = "SONRÍE"
+            prep_text = "SONRÍE!"
         else:
             prep_text = "¡FOTO!"
             
@@ -272,7 +282,11 @@ class PhotoboothGUI:
             self.screen.blit(self.last_photo, (0, 0))
             
             # Texto indicativo
-            text = self.font_small.render("¡Tu foto está siendo impresa!", True, WHITE)
+            if self.printer_name and self.conn:
+                text = self.font_small.render("¡Tu foto está siendo impresa!", True, WHITE)
+            else:
+                text = self.font_small.render("¡Tu foto ha sido guardada!", True, WHITE)
+                
             text_rect = text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT - 50))
             
             # Fondo semi-transparente para el texto
