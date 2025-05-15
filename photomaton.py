@@ -48,7 +48,7 @@ BLINK_SPEED = 500     # Velocidad de parpadeo en milisegundos (500 = medio segun
 COUNTDOWN_TIME = 10  # Tiempo de cuenta regresiva en segundos
 
 # Messages
-SCREEN_TITTLE = "Pinchar 1 euro para tomar una foto"
+SCREEN_TITTLE = "1 foto por 1  euro"
 SCREEN_SUBTITLE = "INSERT COIN"
 FRAME_TITTLE = "<< Fotomatón de Nila >>"
 
