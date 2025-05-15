@@ -22,7 +22,7 @@ import threading
 import os.path
 
 # Ruta a la carpeta de fuentes
-FONT_DIR = os.path.join(os.path.expanduser('~'), 'fonts')
+FONT_DIR = os.path.join(os.path.expanduser('./'), 'fonts')
 # Nombre del archivo de fuente retro (cambiar según la fuente descargada)
 RETRO_FONT = "PressStart2P-Regular.ttf"  # O la fuente que hayas descargado
 # Ruta completa a la fuente
@@ -50,7 +50,9 @@ COUNTDOWN_TIME = 10  # Tiempo de cuenta regresiva en segundos
 # Messages
 SCREEN_TITTLE = "Pinchar 1 euro para tomar una foto"
 SCREEN_SUBTITLE = "INSERT COIN"
-FRAME_TITTLE = "<< Fotomatón de Nila>>"
+FRAME_TITTLE = "<< Fotomatón de Nila >>"
+
+
 
 # Configuración GPIO
 COIN_PIN = 17  # El pin GPIO donde está conectado el detector de monedas
