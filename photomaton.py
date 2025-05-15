@@ -19,6 +19,24 @@ import cups
 import numpy as np
 import threading
 
+import os.path
+
+# Ruta a la carpeta de fuentes
+FONT_DIR = os.path.join(os.path.expanduser('~'), 'fonts')
+# Nombre del archivo de fuente retro (cambiar según la fuente descargada)
+RETRO_FONT = "PressStart2P-Regular.ttf"  # O la fuente que hayas descargado
+# Ruta completa a la fuente
+RETRO_FONT_PATH = os.path.join(FONT_DIR, RETRO_FONT)
+
+# Usar fuente alternativa si la principal no está disponible
+USE_FALLBACK_FONT = True  # Cambiar a False para usar solo fuentes de sistema si la retro falla
+# ------------------------------------------------------
+
+# Reemplaza la sección de inicialización de fuentes en el método __init__
+# ------------------------------------------------------
+        # Cargar fuentes
+ 
+
 # Borde de foto
 PICTURE_BORDER_SIZE = 50
 PICTURE_BORDER_COLOR='white'
@@ -30,9 +48,9 @@ BLINK_SPEED = 500     # Velocidad de parpadeo en milisegundos (500 = medio segun
 COUNTDOWN_TIME = 10  # Tiempo de cuenta regresiva en segundos
 
 # Messages
-SCREEN_TITTLE = "Insert 1€"
-SCREEN_SUBTITLE = "to take a photo"
-FRAME_TITTLE = "^^ Nila's Photo booth ^^"
+SCREEN_TITTLE = "To take a photo insert 1 euro"
+SCREEN_SUBTITLE = "INSERT COIN"
+FRAME_TITTLE = "<< Nila's Photo booth >>"
 
 # Configuración GPIO
 COIN_PIN = 17  # El pin GPIO donde está conectado el detector de monedas
@@ -87,6 +105,48 @@ class PhotoboothGUI:
         self.font_large = pygame.font.Font(None, 80)
         self.font_medium = pygame.font.Font(None, 60)
         self.font_small = pygame.font.Font(None, 40)
+
+        try:
+            # Intentar cargar la fuente retro
+            if os.path.exists(RETRO_FONT_PATH):
+                self.font_large = pygame.font.Font(RETRO_FONT_PATH, 60)
+                self.font_medium = pygame.font.Font(RETRO_FONT_PATH, 40)
+                self.font_small = pygame.font.Font(RETRO_FONT_PATH, 30)
+                print(f"Fuente retro '{RETRO_FONT}' cargada con éxito")
+            else:
+                # Si no se encuentra el archivo, usar fuentes alternativas
+                if USE_FALLBACK_FONT:
+                    # Intentar cargar una fuente de sistema de aspecto retro
+                    retro_system_fonts = ['monospace', 'courier', 'fixedsys', 'consolas']
+                    font_loaded = False
+                    
+                    for font_name in retro_system_fonts:
+                        if font_name in pygame.font.get_fonts():
+                            self.font_large = pygame.font.SysFont(font_name, 70, bold=True)
+                            self.font_medium = pygame.font.SysFont(font_name, 50, bold=True)
+                            self.font_small = pygame.font.SysFont(font_name, 35, bold=True)
+                            print(f"Usando fuente de sistema '{font_name}' como alternativa")
+                            font_loaded = True
+                            break
+                    
+                    if not font_loaded:
+                        # Si ninguna de las alternativas está disponible, usar la fuente predeterminada
+                        self.font_large = pygame.font.Font(None, 80)
+                        self.font_medium = pygame.font.Font(None, 60)
+                        self.font_small = pygame.font.Font(None, 40)
+                        print("No se encontraron fuentes retro, usando fuente predeterminada")
+                else:
+                    # Usar las fuentes predeterminadas si no se usa respaldo
+                    self.font_large = pygame.font.Font(None, 80)
+                    self.font_medium = pygame.font.Font(None, 60)
+                    self.font_small = pygame.font.Font(None, 40)
+                    print(f"Fuente retro no encontrada en '{RETRO_FONT_PATH}'. Usando fuente predeterminada")
+        except Exception as e:
+            # En caso de error, volver a las fuentes predeterminadas
+            self.font_large = pygame.font.Font(None, 80)
+            self.font_medium = pygame.font.Font(None, 60)
+            self.font_small = pygame.font.Font(None, 40)
+            print(f"Error al cargar la fuente retro: {e}. Usando fuente predeterminada")
         
         # Inicializar cámara
         self.camera = None
