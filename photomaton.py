@@ -25,7 +25,7 @@ import os.path
 try:
     with open('settings.yml', 'r') as file:
         settings = yaml.safe_load(file)
-        print("Configuración cargada desde settings.yml")
+        print("Settings loaded from settings.yml")
 except Exception as e:
     print(f"Error loading settings: {e}")
     settings = {}
@@ -35,7 +35,6 @@ except Exception as e:
 SCREEN_TITTLE = settings.get('SCREEN_TITTLE', "1 foto por 1  euro")
 SCREEN_SUBTITLE = settings.get('SCREEN_SUBTITLE', "INSERT COIN")
 FRAME_TITTLE = settings.get('FRAME_TITTLE', "<< Fotomatón de Nila >>")
-
 
 # Ruta a la carpeta de fuentes
 FONT_DIR = os.path.join(os.path.expanduser('./'), 'fonts')
