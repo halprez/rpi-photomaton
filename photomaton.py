@@ -25,7 +25,8 @@ import os.path
 try:
     with open('settings.yml', 'r') as file:
         settings = yaml.safe_load(file)
-        print("Settings successfully loaded from {'settings.yml'}", settings.filepath)
+        print(f"Settings successfully loaded from {file.name}")
+        
 except Exception as e:
     print(f"Error loading settings: {e}")
     settings = {}
