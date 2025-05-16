@@ -32,10 +32,43 @@ except Exception as e:
     settings = {}
 # ------------------------------------------------------
 
-# Messages
+# Settings
+# ------------------------------------------------------
 SCREEN_TITTLE = settings.get('SCREEN_TITTLE', "1 foto por 1  euro")
 SCREEN_SUBTITLE = settings.get('SCREEN_SUBTITLE', "INSERT COIN")
 FRAME_TITTLE = settings.get('FRAME_TITTLE', "<< Fotomatón de Nila >>")
+
+PICTURE_BORDER_SIZE = settings.get('PICTURE_BORDER_SIZE', 50)
+PICTURE_BORDER_COLOR = settings.get('PICTURE_BORDER_COLOR', 'white')
+
+BLINK_ENABLED = settings.get('BLINK_ENABLED', True)  # Activar/desactivar efecto intermitente
+BLINK_SPEED = settings.get('BLINK_SPEED', 500)     # Velocidad de parpadeo en milisegundos (500 = medio segundo)
+
+COUNTDOWN_TIME = settings.get('COUNTDOWN_TIME', 10)  # Tiempo de cuenta regresiva en segundos
+
+COIN_PIN = settings.get('COIN_PIN', 17)  # El pin GPIO donde está conectado el detector de monedas
+LED_PIN = settings.get('LED_PIN', 27)   # Pin para un LED opcional
+
+# Configuración de la pantalla
+SCREEN_WIDTH = settings.get('SCREEN_WIDTH', 1280)
+SCREEN_HEIGHT = settings.get('SCREEN_HEIGHT', 720)
+FULLSCREEN = settings.get('FULLSCREEN', True)  # Cambiar a False para modo ventana durante desarrollo
+
+# Configuración del marco
+FRAME_ENABLED = settings.get('FRAME_ENABLED', True)
+FRAME_THICKNESS = settings.get('FRAME_THICKNESS', 60)  # Grosor del marco en píxeles
+FRAME_COLOR = settings.get('FRAME_COLOR', (50, 50, 50))  # Color del marco (gris oscuro)
+FRAME_INNER_COLOR = settings.get('FRAME_INNER_COLOR', (20, 20, 20))  # Color del borde interior (casi negro)
+FRAME_INNER_THICKNESS = settings.get('FRAME_INNER_THICKNESS', 5)  # Grosor del borde interior
+FRAME_ROUNDED = settings.get('FRAME_ROUNDED', True)  # Si quieres que el marco tenga esquinas redondeadas
+FRAME_CORNER_RADIUS = settings.get('FRAME_CORNER_RADIUS', 20)  # Radio de las esquinas redondeadas (si FRAME_ROUNDED es True)
+
+# Configuración de colores
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
 
 # Ruta a la carpeta de fuentes
 FONT_DIR = os.path.join(os.path.expanduser('./'), 'fonts')
@@ -46,47 +79,6 @@ RETRO_FONT_PATH = os.path.join(FONT_DIR, RETRO_FONT)
 
 # Usar fuente alternativa si la principal no está disponible
 USE_FALLBACK_FONT = True  # Cambiar a False para usar solo fuentes de sistema si la retro falla
-# ------------------------------------------------------
-
-# Reemplaza la sección de inicialización de fuentes en el método __init__
-# ------------------------------------------------------
-        # Cargar fuentes
- 
-
-# Borde de foto
-PICTURE_BORDER_SIZE = 50
-PICTURE_BORDER_COLOR='white'
-
-BLINK_ENABLED = True  # Activar/desactivar efecto intermitente
-BLINK_SPEED = 500     # Velocidad de parpadeo en milisegundos (500 = medio segundo)
-
-
-COUNTDOWN_TIME = 10  # Tiempo de cuenta regresiva en segundos
-
-# Configuración GPIO
-COIN_PIN = 17  # El pin GPIO donde está conectado el detector de monedas
-LED_PIN = 27   # Pin para un LED opcional
-
-# Configuración de la pantalla
-SCREEN_WIDTH = 1280
-SCREEN_HEIGHT = 720
-FULLSCREEN = True  # Cambiar a False para modo ventana durante desarrollo
-
-# Configuración del marco
-FRAME_ENABLED = True
-FRAME_THICKNESS = 60  # Grosor del marco en píxeles
-FRAME_COLOR = (50, 50, 50)  # Color del marco (gris oscuro)
-FRAME_INNER_COLOR = (20, 20, 20)  # Color del borde interior (casi negro)
-FRAME_INNER_THICKNESS = 5  # Grosor del borde interior
-FRAME_ROUNDED = True  # Si quieres que el marco tenga esquinas redondeadas
-FRAME_CORNER_RADIUS = 20  # Radio de las esquinas redondeadas (si FRAME_ROUNDED es True)
-
-# Configuración de colores
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-RED = (255, 0, 0)
-GREEN = (0, 255, 0)
-BLUE = (0, 0, 255)
 
 # Configuración de directorios
 SAVE_DIR = os.path.join(os.path.expanduser('~'), 'photobooth_images')
