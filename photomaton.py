@@ -22,14 +22,19 @@ import yaml
 import os.path
 
 # Load the YAML settings file
-with open('settings.yml', 'r') as file:
-    settings = yaml.safe_load(file)
+try:
+    with open('settings.yml', 'r') as file:
+        settings = yaml.safe_load(file)
+        print("Configuración cargada desde settings.yml")
+except Exception as e:
+    print(f"Error loading settings: {e}")
+    settings = {}
+# ------------------------------------------------------
 
 # Messages
 SCREEN_TITTLE = settings.get('SCREEN_TITTLE', "1 foto por 1  euro")
 SCREEN_SUBTITLE = settings.get('SCREEN_SUBTITLE', "INSERT COIN")
 FRAME_TITTLE = settings.get('FRAME_TITTLE', "<< Fotomatón de Nila >>")
-
 
 
 # Ruta a la carpeta de fuentes

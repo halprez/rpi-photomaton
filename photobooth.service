@@ -1,0 +1,13 @@
+[Unit]
+Description=Photobooth Service
+After=network.target
+
+[Service]
+User=nila
+WorkingDirectory=/home/nila/src/rpi-Photobooth
+ExecStart=/home/nila/src/rpi-photobooth/run_photobooth.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
