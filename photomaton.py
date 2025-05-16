@@ -18,8 +18,19 @@ from PIL import Image, ImageEnhance, ImageOps
 import cups
 import numpy as np
 import threading
-
+import yaml
 import os.path
+
+# Load the YAML settings file
+with open('settings.yml', 'r') as file:
+    settings = yaml.safe_load(file)
+
+# Messages
+SCREEN_TITTLE = settings.get('SCREEN_TITTLE', "1 foto por 1  euro")
+SCREEN_SUBTITLE = settings.get('SCREEN_SUBTITLE', "INSERT COIN")
+FRAME_TITTLE = settings.get('FRAME_TITTLE', "<< Fotomatón de Nila >>")
+
+
 
 # Ruta a la carpeta de fuentes
 FONT_DIR = os.path.join(os.path.expanduser('./'), 'fonts')
@@ -46,13 +57,6 @@ BLINK_SPEED = 500     # Velocidad de parpadeo en milisegundos (500 = medio segun
 
 
 COUNTDOWN_TIME = 10  # Tiempo de cuenta regresiva en segundos
-
-# Messages
-SCREEN_TITTLE = "1 foto por 1  euro"
-SCREEN_SUBTITLE = "INSERT COIN"
-FRAME_TITTLE = "<< Fotomatón de Nila >>"
-
-
 
 # Configuración GPIO
 COIN_PIN = 17  # El pin GPIO donde está conectado el detector de monedas
