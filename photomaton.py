@@ -209,12 +209,15 @@ class PhotoboothGUI:
         if not FRAME_ENABLED:
             return
         
+        # Marco inferior reducido a la mitad
+        bottom_frame_thickness = FRAME_THICKNESS // 2
+        
         # Área interior del marco (el espacio donde se muestra el contenido)
         interior_rect = pygame.Rect(
             FRAME_THICKNESS, 
             FRAME_THICKNESS, 
             SCREEN_WIDTH - 2 * FRAME_THICKNESS, 
-            SCREEN_HEIGHT - 2 * FRAME_THICKNESS
+            SCREEN_HEIGHT - FRAME_THICKNESS - bottom_frame_thickness
         )
         
         # Dibuja el marco exterior (cubre toda la pantalla)
@@ -224,18 +227,18 @@ class PhotoboothGUI:
             pygame.draw.rect(self.screen, FRAME_COLOR, 
                             (FRAME_CORNER_RADIUS, 0, 
                             SCREEN_WIDTH - 2 * FRAME_CORNER_RADIUS, FRAME_THICKNESS))
-            # Marco inferior
+            # Marco inferior (reducido)
             pygame.draw.rect(self.screen, FRAME_COLOR, 
-                            (FRAME_CORNER_RADIUS, SCREEN_HEIGHT - FRAME_THICKNESS, 
-                            SCREEN_WIDTH - 2 * FRAME_CORNER_RADIUS, FRAME_THICKNESS))
+                            (FRAME_CORNER_RADIUS, SCREEN_HEIGHT - bottom_frame_thickness, 
+                            SCREEN_WIDTH - 2 * FRAME_CORNER_RADIUS, bottom_frame_thickness))
             # Marco izquierdo
             pygame.draw.rect(self.screen, FRAME_COLOR, 
                             (0, FRAME_CORNER_RADIUS, 
-                            FRAME_THICKNESS, SCREEN_HEIGHT - 2 * FRAME_CORNER_RADIUS))
+                            FRAME_THICKNESS, SCREEN_HEIGHT - FRAME_CORNER_RADIUS - bottom_frame_thickness + FRAME_CORNER_RADIUS))
             # Marco derecho
             pygame.draw.rect(self.screen, FRAME_COLOR, 
                             (SCREEN_WIDTH - FRAME_THICKNESS, FRAME_CORNER_RADIUS, 
-                            FRAME_THICKNESS, SCREEN_HEIGHT - 2 * FRAME_CORNER_RADIUS))
+                            FRAME_THICKNESS, SCREEN_HEIGHT - FRAME_CORNER_RADIUS - bottom_frame_thickness + FRAME_CORNER_RADIUS))
             
             # Esquinas redondeadas (círculos en las 4 esquinas)
             # Esquina superior izquierda
@@ -244,16 +247,17 @@ class PhotoboothGUI:
             # Esquina superior derecha
             pygame.draw.circle(self.screen, FRAME_COLOR, 
                             (SCREEN_WIDTH - FRAME_CORNER_RADIUS, FRAME_CORNER_RADIUS), FRAME_CORNER_RADIUS)
-            # Esquina inferior izquierda
+            # Esquina inferior izquierda (ajustada para marco inferior más delgado)
+            bottom_corner_radius = min(FRAME_CORNER_RADIUS, bottom_frame_thickness)
             pygame.draw.circle(self.screen, FRAME_COLOR, 
-                            (FRAME_CORNER_RADIUS, SCREEN_HEIGHT - FRAME_CORNER_RADIUS), FRAME_CORNER_RADIUS)
-            # Esquina inferior derecha
+                            (FRAME_CORNER_RADIUS, SCREEN_HEIGHT - bottom_corner_radius), bottom_corner_radius)
+            # Esquina inferior derecha (ajustada para marco inferior más delgado)
             pygame.draw.circle(self.screen, FRAME_COLOR, 
-                            (SCREEN_WIDTH - FRAME_CORNER_RADIUS, SCREEN_HEIGHT - FRAME_CORNER_RADIUS), FRAME_CORNER_RADIUS)
+                            (SCREEN_WIDTH - FRAME_CORNER_RADIUS, SCREEN_HEIGHT - bottom_corner_radius), bottom_corner_radius)
         else:
             # Marco simple sin esquinas redondeadas
             pygame.draw.rect(self.screen, FRAME_COLOR, (0, 0, SCREEN_WIDTH, FRAME_THICKNESS))  # Superior
-            pygame.draw.rect(self.screen, FRAME_COLOR, (0, SCREEN_HEIGHT - FRAME_THICKNESS, SCREEN_WIDTH, FRAME_THICKNESS))  # Inferior
+            pygame.draw.rect(self.screen, FRAME_COLOR, (0, SCREEN_HEIGHT - bottom_frame_thickness, SCREEN_WIDTH, bottom_frame_thickness))  # Inferior (reducido)
             pygame.draw.rect(self.screen, FRAME_COLOR, (0, 0, FRAME_THICKNESS, SCREEN_HEIGHT))  # Izquierdo
             pygame.draw.rect(self.screen, FRAME_COLOR, (SCREEN_WIDTH - FRAME_THICKNESS, 0, FRAME_THICKNESS, SCREEN_HEIGHT))  # Derecho
         
