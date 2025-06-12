@@ -24,6 +24,7 @@ import numpy as np
 import threading
 import yaml
 import os.path
+import tempfile
 
 # Load the YAML settings file
 try:
@@ -54,10 +55,16 @@ BETWEEN_PHOTOS_TIME = settings.get('BETWEEN_PHOTOS_TIME', 2)  # Tiempo entre fot
 TOTAL_PHOTOS = 3  # Número total de fotos a tomar
 
 # Configuración para imagen compuesta
-COMPOSITE_SPACING = settings.get('COMPOSITE_SPACING', 20)  # Espacio entre fotos en la imagen compuesta
-COMPOSITE_MARGIN = settings.get('COMPOSITE_MARGIN', 40)    # Margen alrededor de la imagen compuesta
-COMPOSITE_ADD_HEADER = settings.get('COMPOSITE_ADD_HEADER', True)  # Agregar texto de fecha/hora
-COMPOSITE_LAYOUT = settings.get('COMPOSITE_LAYOUT', 'vertical')  # 'vertical' o 'horizontal'
+COMPOSITE_SPACING = settings.get('COMPOSITE_SPACING', 10)  # Espacio entre fotos reducido para tira
+COMPOSITE_MARGIN = settings.get('COMPOSITE_MARGIN', 20)    # Margen más pequeño para tira
+COMPOSITE_ADD_HEADER = settings.get('COMPOSITE_ADD_HEADER', False)  # Sin header para tira
+COMPOSITE_LAYOUT = settings.get('COMPOSITE_LAYOUT', 'horizontal')  # Horizontal para tira
+
+# Configuración específica para DNP DS620
+DNP_STRIP_WIDTH = settings.get('DNP_STRIP_WIDTH', 1844)    # Ancho en píxeles para tira 2x6"
+DNP_STRIP_HEIGHT = settings.get('DNP_STRIP_HEIGHT', 1240)  # Alto en píxeles para tira 2x6"
+DNP_PHOTO_SPACING = settings.get('DNP_PHOTO_SPACING', 5)   # Espaciado mínimo entre fotos en tira
+DNP_PRINT_SIZE = settings.get('DNP_PRINT_SIZE', '2x6')     # Tamaño de impresión: '2x6', '4x6', '5x7', etc.
 
 COIN_PIN = settings.get('COIN_PIN', 17)  # El pin GPIO donde está conectado el detector de monedas
 LED_PIN = settings.get('LED_PIN', 27)   # Pin para un LED opcional
@@ -94,10 +101,47 @@ RETRO_FONT_PATH = os.path.join(FONT_DIR, RETRO_FONT)
 # Usar fuente alternativa si la principal no está disponible
 USE_FALLBACK_FONT = True  # Cambiar a False para usar solo fuentes de sistema si la retro falla
 
-# Configuración de directorios
-SAVE_DIR = os.path.join(os.path.expanduser('~'), 'photobooth_images')
-if not os.path.exists(SAVE_DIR):
-    os.makedirs(SAVE_DIR)
+# Configuración de directorios - ahora se determina dinámicamente
+def get_save_directory():
+    """Detecta si hay un pendrive USB y devuelve la ruta de guardado."""
+    # Directorios comunes donde se montan dispositivos USB en Raspberry Pi/Linux
+    usb_mount_paths = [
+        '/media/pi',      # Raspberry Pi OS
+        '/media',         # Sistemas Linux generales
+        '/mnt',           # Montajes manuales
+        '/run/media'      # Algunas distribuciones
+    ]
+    
+    for base_path in usb_mount_paths:
+        if os.path.exists(base_path):
+            try:
+                # Buscar subdirectorios (dispositivos montados)
+                for item in os.listdir(base_path):
+                    usb_path = os.path.join(base_path, item)
+                    if os.path.isdir(usb_path):
+                        # Verificar si podemos escribir en el directorio
+                        test_file = os.path.join(usb_path, '.photobooth_test')
+                        try:
+                            with open(test_file, 'w') as f:
+                                f.write('test')
+                            os.remove(test_file)
+                            
+                            # Crear carpeta para fotos en el pendrive
+                            photobooth_dir = os.path.join(usb_path, 'photobooth_images')
+                            if not os.path.exists(photobooth_dir):
+                                os.makedirs(photobooth_dir)
+                            
+                            print(f"Pendrive USB detectado: {usb_path}")
+                            return photobooth_dir
+                        except (PermissionError, OSError):
+                            # No se puede escribir, continuar buscando
+                            continue
+            except (PermissionError, OSError):
+                # No se puede acceder al directorio, continuar
+                continue
+    
+    print("No se detectó ningún pendrive USB con permisos de escritura")
+    return None
 
 class PhotoboothGUI:
     def __init__(self):
@@ -177,6 +221,8 @@ class PhotoboothGUI:
         self.current_photo_countdown = 0  # Cuenta regresiva entre fotos
         self.taken_photos = []  # Lista para almacenar las fotos tomadas
         self.session_timestamp = None  # Timestamp de la sesión actual
+        self.save_dir = None  # Directorio donde se guardarán las fotos (determinado dinámicamente)
+        self.usb_available = False  # Flag para saber si hay USB disponible
 
         # Para el efecto de parpadeo
         self.blink_visible = True
@@ -316,12 +362,43 @@ class PhotoboothGUI:
             print("Error al capturar la imagen.")
             return None
         
+        # Solo procesar y guardar si hay USB disponible
+        if not self.usb_available:
+            print(f"Foto {self.photos_taken + 1} tomada pero no guardada (no hay USB)")
+            # Crear imagen temporal solo para mostrar en pantalla
+            import tempfile
+            temp_dir = tempfile.gettempdir()
+            if self.session_timestamp is None:
+                self.session_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            temp_filename = f"temp_photo_{self.photos_taken + 1}.jpg"
+            temp_filepath = os.path.join(temp_dir, temp_filename)
+            
+            # Guardar temporalmente para mostrar
+            cv2.imwrite(temp_filepath, frame)
+            
+            # Convertir para pygame sin procesar con PIL
+            pygame_image = pygame.image.load(temp_filepath)
+            pygame_image = pygame.transform.scale(pygame_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
+            
+            # Agregar a la lista de fotos tomadas
+            self.taken_photos.append(pygame_image)
+            self.photos_taken += 1
+            
+            # Eliminar archivo temporal
+            try:
+                os.remove(temp_filepath)
+            except:
+                pass
+                
+            return None  # No hay archivo permanente
+        
         # Generar nombre de archivo con timestamp de la sesión y número de foto
         if self.session_timestamp is None:
             self.session_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         filename = f"photobooth_{self.session_timestamp}_foto{self.photos_taken + 1}.jpg"
-        filepath = os.path.join(SAVE_DIR, filename)
+        filepath = os.path.join(self.save_dir, filename)
         
         # Guardar imagen original
         cv2.imwrite(filepath, frame)
@@ -352,13 +429,18 @@ class PhotoboothGUI:
         return filepath
     
     def create_composite_image(self):
-        """Crea una imagen compuesta con las 3 fotos en una sola hoja."""
+        """Crea una imagen compuesta optimizada para DNP DS620 en formato tira."""
+        # Solo crear imagen compuesta si hay USB y se guardaron las fotos
+        if not self.usb_available or not self.save_dir:
+            print("No se creará imagen compuesta: no hay USB disponible")
+            return None
+            
         try:
             # Cargar las 3 imágenes individuales
             images = []
             for i in range(TOTAL_PHOTOS):
                 photo_path = f"photobooth_{self.session_timestamp}_foto{i+1}.jpg"
-                full_path = os.path.join(SAVE_DIR, photo_path)
+                full_path = os.path.join(self.save_dir, photo_path)
                 if os.path.exists(full_path):
                     img = Image.open(full_path)
                     images.append(img)
@@ -370,110 +452,105 @@ class PhotoboothGUI:
                 print("No se pudieron cargar todas las imágenes")
                 return None
             
-            # Obtener dimensiones de las imágenes (asumiendo que todas son iguales)
-            img_width, img_height = images[0].size
+            # Crear imagen optimizada para tira DNP DS620
+            strip_width = DNP_STRIP_WIDTH
+            strip_height = DNP_STRIP_HEIGHT
+            spacing = DNP_PHOTO_SPACING
             
-            # Configuración para la disposición
-            spacing = COMPOSITE_SPACING
-            margin = COMPOSITE_MARGIN
-            header_height = 50 if COMPOSITE_ADD_HEADER else 0
+            # Calcular tamaño de cada foto en la tira
+            available_width = strip_width - (spacing * (TOTAL_PHOTOS + 1))
+            photo_width = available_width // TOTAL_PHOTOS
             
-            # Calcular dimensiones según el layout
-            if COMPOSITE_LAYOUT == 'horizontal':
-                # 3 fotos horizontalmente
-                composite_width = (img_width * TOTAL_PHOTOS) + (spacing * (TOTAL_PHOTOS - 1)) + 2 * margin
-                composite_height = img_height + 2 * margin + header_height
-            else:
-                # 3 fotos verticalmente (por defecto)
-                composite_width = img_width + 2 * margin
-                composite_height = (img_height * TOTAL_PHOTOS) + (spacing * (TOTAL_PHOTOS - 1)) + 2 * margin + header_height
+            # Mantener proporción de aspecto original
+            original_width, original_height = images[0].size
+            aspect_ratio = original_height / original_width
+            photo_height = int(photo_width * aspect_ratio)
             
-            # Crear imagen compuesta con fondo blanco
-            composite = Image.new('RGB', (composite_width, composite_height), 'white')
+            # Ajustar si la altura excede el límite de la tira
+            if photo_height > strip_height - (2 * spacing):
+                photo_height = strip_height - (2 * spacing)
+                photo_width = int(photo_height / aspect_ratio)
             
-            # Agregar texto en la parte superior (si está habilitado)
-            text_height_used = 0
-            if COMPOSITE_ADD_HEADER:
-                try:
-                    draw = ImageDraw.Draw(composite)
-                    
-                    # Intentar usar una fuente del sistema
-                    try:
-                        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
-                    except:
-                        try:
-                            font = ImageFont.truetype("arial.ttf", 24)
-                        except:
-                            font = ImageFont.load_default()
-                    
-                    # Texto en la parte superior
-                    header_text = f"Fotomatón - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-                    text_bbox = draw.textbbox((0, 0), header_text, font=font)
-                    text_width = text_bbox[2] - text_bbox[0]
-                    text_x = (composite_width - text_width) // 2
-                    
-                    draw.text((text_x, 10), header_text, fill='black', font=font)
-                    text_height_used = header_height
-                    
-                except Exception as e:
-                    print(f"No se pudo agregar texto al compuesto: {e}")
-                    text_height_used = 0
+            # Crear imagen de tira con fondo blanco
+            strip_image = Image.new('RGB', (strip_width, strip_height), 'white')
             
-            # Colocar las fotos según el layout
-            if COMPOSITE_LAYOUT == 'horizontal':
-                # Disposición horizontal
-                x_position = margin
-                y_position = margin + text_height_used
-                for i, img in enumerate(images):
-                    composite.paste(img, (x_position, y_position))
-                    x_position += img_width + spacing
-            else:
-                # Disposición vertical (por defecto)
-                x_position = margin
-                y_position = margin + text_height_used
-                for i, img in enumerate(images):
-                    composite.paste(img, (x_position, y_position))
-                    y_position += img_height + spacing
+            # Calcular posición inicial para centrar las fotos
+            total_photos_width = (photo_width * TOTAL_PHOTOS) + (spacing * (TOTAL_PHOTOS - 1))
+            start_x = (strip_width - total_photos_width) // 2
+            start_y = (strip_height - photo_height) // 2
             
-            # Guardar la imagen compuesta
-            composite_filename = f"photobooth_{self.session_timestamp}_compuesta.jpg"
-            composite_path = os.path.join(SAVE_DIR, composite_filename)
-            composite.save(composite_path, 'JPEG', quality=95)
+            # Colocar las 3 fotos horizontalmente en la tira
+            x_position = start_x
+            for i, img in enumerate(images):
+                # Redimensionar la imagen manteniendo la proporción
+                resized_img = img.resize((photo_width, photo_height), Image.Resampling.LANCZOS)
+                
+                # Pegar la imagen en la tira
+                strip_image.paste(resized_img, (x_position, start_y))
+                x_position += photo_width + spacing
+                
+                print(f"Foto {i+1} colocada en posición ({x_position - photo_width - spacing}, {start_y})")
             
-            print(f"Imagen compuesta creada: {composite_path}")
-            print(f"Dimensiones: {composite_width}x{composite_height} - Layout: {COMPOSITE_LAYOUT}")
-            return composite_path
+            # Guardar la imagen de tira
+            strip_filename = f"photobooth_{self.session_timestamp}_tira_dnp.jpg"
+            strip_path = os.path.join(self.save_dir, strip_filename)
+            strip_image.save(strip_path, 'JPEG', quality=100, dpi=(300, 300))
+            
+            print(f"Tira DNP creada: {strip_path}")
+            print(f"Dimensiones de tira: {strip_width}x{strip_height}")
+            print(f"Dimensiones de cada foto: {photo_width}x{photo_height}")
+            return strip_path
             
         except Exception as e:
-            print(f"Error al crear imagen compuesta: {e}")
+            print(f"Error al crear tira DNP: {e}")
             return None
 
     def print_photos(self):
-        """Crea una imagen compuesta y la envía a la impresora."""
+        """Crea una tira e imprime en DNP DS620."""
+        if not self.usb_available:
+            print("No se imprimirá: no hay USB disponible")
+            return False
+            
         if not self.printer_name or not self.conn:
             print("Sistema de impresión no disponible. Las fotos se guardarán sin imprimir.")
             return False
         
-        def print_composite():
+        def print_strip():
             try:
-                # Crear imagen compuesta
-                composite_path = self.create_composite_image()
-                if composite_path and os.path.exists(composite_path):
-                    print(f"Imprimiendo imagen compuesta: {composite_path}")
+                # Crear tira para DNP DS620
+                strip_path = self.create_composite_image()
+                if strip_path and os.path.exists(strip_path):
+                    print(f"Imprimiendo tira en DNP DS620: {strip_path}")
+                    
+                    # Opciones específicas para DNP DS620
+                    print_options = {
+                        'media': DNP_PRINT_SIZE,           # Tamaño del papel (2x6, 4x6, etc.)
+                        'fit-to-page': 'true',             # Ajustar a la página
+                        'print-quality': 'high',           # Calidad alta
+                        'print-color-mode': 'color',       # Modo color
+                        'orientation-requested': '3',       # Horizontal (landscape)
+                        'resolution': '300dpi',            # Resolución 300 DPI
+                        'ColorModel': 'RGB',               # Modelo de color RGB
+                        'PrintOptimizeImage': 'true',      # Optimizar imagen
+                        'Duplex': 'None'                   # Sin impresión duplex
+                    }
+                    
+                    # Enviar trabajo de impresión con opciones específicas
                     job_id = self.conn.printFile(
                         self.printer_name, 
-                        composite_path, 
-                        "Photobooth Composite", 
-                        {}
+                        strip_path, 
+                        "Photobooth Strip DNP DS620", 
+                        print_options
                     )
-                    print(f"Trabajo de impresión enviado. ID: {job_id}")
+                    print(f"Trabajo de impresión DNP enviado. ID: {job_id}")
+                    print(f"Opciones de impresión: {print_options}")
                 else:
-                    print("No se pudo crear la imagen compuesta para imprimir")
+                    print("No se pudo crear la tira para imprimir")
             except Exception as e:
-                print(f"Error al imprimir imagen compuesta: {e}")
+                print(f"Error al imprimir en DNP DS620: {e}")
         
         # Iniciar la impresión en un hilo separado para no bloquear la interfaz
-        print_thread = threading.Thread(target=print_composite)
+        print_thread = threading.Thread(target=print_strip)
         print_thread.daemon = True
         print_thread.start()
     
@@ -491,6 +568,15 @@ class PhotoboothGUI:
     
     def start_photo_sequence(self):
         """Inicia la secuencia de 3 fotos."""
+        # Detectar si hay pendrive USB disponible
+        self.save_dir = get_save_directory()
+        self.usb_available = self.save_dir is not None
+        
+        if self.usb_available:
+            print(f"USB detectado. Las fotos se guardarán en: {self.save_dir}")
+        else:
+            print("No se detectó USB. Las fotos serán temporales y no se guardarán.")
+        
         self.current_state = "initial_countdown"
         self.countdown_value = INITIAL_COUNTDOWN_TIME
         self.photos_taken = 0
@@ -658,11 +744,10 @@ class PhotoboothGUI:
                 num_text = self.font_small.render(f"{i+1}", True, WHITE)
                 self.screen.blit(num_text, (x_pos + 10, start_y + 10))
         
-        # Texto indicativo
-        if self.printer_name and self.conn:
-            text = self.font_medium.render("¡Tus 3 fotos se están imprimiendo en una hoja!", True, GREEN)
-        else:
-            text = self.font_medium.render("¡Sesión completada! 3 fotos guardadas", True, GREEN)
+        # Mostrar estado según disponibilidad de USB
+        if self.usb_available:
+            if self.printer_name and self.conn:
+                text = self.font_medium.render("¡Imprimiendo tus fotos!", True, GREEN)
             
         text_rect = text.get_rect(center=(SCREEN_WIDTH//2, 100))
         
@@ -671,11 +756,6 @@ class PhotoboothGUI:
         text_bg.fill((0, 0, 0, 180))
         self.screen.blit(text_bg, (text_rect.x - 20, text_rect.y - 10))
         self.screen.blit(text, text_rect)
-        
-        # Mensaje adicional
-        thanks_text = self.font_small.render("¡Gracias por usar nuestro fotomatón!", True, WHITE)
-        thanks_rect = thanks_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT - 50))
-        self.screen.blit(thanks_text, thanks_rect)
         
         # Dibujar el marco por encima de todo
         self.draw_frame()
@@ -792,6 +872,8 @@ class PhotoboothGUI:
                         self.photos_taken = 0
                         self.taken_photos = []
                         self.session_timestamp = None
+                        self.save_dir = None
+                        self.usb_available = False
                 
                 # Dibujar pantalla según el estado actual
                 if self.current_state == "waiting_coin":
@@ -815,6 +897,18 @@ class PhotoboothGUI:
     def cleanup(self):
         """Liberar recursos al cerrar."""
         print("Limpiando recursos...")
+        
+        # Limpiar archivos temporales si existen
+        try:
+            temp_dir = tempfile.gettempdir()
+            for i in range(1, 4):
+                temp_file = os.path.join(temp_dir, f"temp_photo_{i}.jpg")
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
+                    print(f"Archivo temporal eliminado: {temp_file}")
+        except Exception as e:
+            print(f"Error al limpiar archivos temporales: {e}")
+        
         if self.camera is not None and self.camera.isOpened():
             self.camera.release()
         GPIO.cleanup()
