@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Aplicación de Fotomatón con Interfaz Gráfica para Raspberry Pi
-- Detecta monedas a través del GPIO
-- Muestra interfaz gráfica en pantalla HDMI
-- Toma fotos con webcam USB
-- Imprime las fotos
+Photo Booth GUI for Raspberry Pi - 3 Fotos Secuenciales
+- Detects coin insertion
+- Displays graphical interface on HDMI screen
+- Takes 3 photos with USB webcam in sequence
+- Prints photos
 """
+#TODO: quitar cualquier referencia a Nila del fuente y todos los mensajes en ingles
+#TODO: numero fijo de fotos en fichero rotativo
+#TODO: transformacion en servicio y carga de settings desde linea de comandos --congig_file=path_to_file
+#TODO: Example settings.yml file with all options and possible values
 
 import time
 import os
@@ -14,7 +18,7 @@ import cv2
 import RPi.GPIO as GPIO
 import pygame
 from datetime import datetime
-from PIL import Image, ImageEnhance, ImageOps
+from PIL import Image, ImageEnhance, ImageOps, ImageDraw, ImageFont
 import cups
 import numpy as np
 import threading
@@ -28,13 +32,13 @@ try:
         print(f"Settings successfully loaded from {file.name}")
         
 except Exception as e:
-    print(f"Error loading settings: {e}")
+    print(f"Error loading settings file from {file.name}: {e}")
+    print("Using default settings.")
     settings = {}
 # ------------------------------------------------------
-
 # Settings
 # ------------------------------------------------------
-SCREEN_TITTLE = settings.get('SCREEN_TITTLE', "1 foto por 1  euro")
+SCREEN_TITTLE = settings.get('SCREEN_TITTLE', "3 fotos por 1 euro")
 SCREEN_SUBTITLE = settings.get('SCREEN_SUBTITLE', "INSERT COIN")
 FRAME_TITTLE = settings.get('FRAME_TITTLE', "<< Fotomatón de Nila >>")
 
@@ -44,7 +48,16 @@ PICTURE_BORDER_COLOR = settings.get('PICTURE_BORDER_COLOR', 'white')
 BLINK_ENABLED = settings.get('BLINK_ENABLED', True)  # Activar/desactivar efecto intermitente
 BLINK_SPEED = settings.get('BLINK_SPEED', 500)     # Velocidad de parpadeo en milisegundos (500 = medio segundo)
 
-COUNTDOWN_TIME = settings.get('COUNTDOWN_TIME', 10)  # Tiempo de cuenta regresiva en segundos
+# Configuración de tiempos para las 3 fotos
+INITIAL_COUNTDOWN_TIME = settings.get('INITIAL_COUNTDOWN_TIME', 5)  # Tiempo inicial antes de la primera foto
+BETWEEN_PHOTOS_TIME = settings.get('BETWEEN_PHOTOS_TIME', 2)  # Tiempo entre fotos
+TOTAL_PHOTOS = 3  # Número total de fotos a tomar
+
+# Configuración para imagen compuesta
+COMPOSITE_SPACING = settings.get('COMPOSITE_SPACING', 20)  # Espacio entre fotos en la imagen compuesta
+COMPOSITE_MARGIN = settings.get('COMPOSITE_MARGIN', 40)    # Margen alrededor de la imagen compuesta
+COMPOSITE_ADD_HEADER = settings.get('COMPOSITE_ADD_HEADER', True)  # Agregar texto de fecha/hora
+COMPOSITE_LAYOUT = settings.get('COMPOSITE_LAYOUT', 'vertical')  # 'vertical' o 'horizontal'
 
 COIN_PIN = settings.get('COIN_PIN', 17)  # El pin GPIO donde está conectado el detector de monedas
 LED_PIN = settings.get('LED_PIN', 27)   # Pin para un LED opcional
@@ -69,6 +82,7 @@ BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
+YELLOW = (255, 255, 0)
 
 # Ruta a la carpeta de fuentes
 FONT_DIR = os.path.join(os.path.expanduser('./'), 'fonts')
@@ -155,16 +169,18 @@ class PhotoboothGUI:
         self.camera = None
         self.connect_camera()
         
-        # Variables de estado
+        # Variables de estado para secuencia de 3 fotos
         self.running = True
-        self.current_state = "waiting_coin"  # Estados: waiting_coin, countdown, show_photo
-        self.countdown_value = COUNTDOWN_TIME
-        self.last_photo = None
+        self.current_state = "waiting_coin"  # Estados: waiting_coin, initial_countdown, taking_photos, show_photos
+        self.countdown_value = INITIAL_COUNTDOWN_TIME
+        self.photos_taken = 0  # Contador de fotos tomadas
+        self.current_photo_countdown = 0  # Cuenta regresiva entre fotos
+        self.taken_photos = []  # Lista para almacenar las fotos tomadas
+        self.session_timestamp = None  # Timestamp de la sesión actual
 
         # Para el efecto de parpadeo
         self.blink_visible = True
         self.last_blink_time = pygame.time.get_ticks()
-        
         
         # Configuración de impresora
         self.printer_name = None
@@ -296,9 +312,11 @@ class PhotoboothGUI:
             print("Error al capturar la imagen.")
             return None
         
-        # Generar nombre de archivo con timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"photobooth_{timestamp}.jpg"
+        # Generar nombre de archivo con timestamp de la sesión y número de foto
+        if self.session_timestamp is None:
+            self.session_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        filename = f"photobooth_{self.session_timestamp}_foto{self.photos_taken + 1}.jpg"
         filepath = os.path.join(SAVE_DIR, filename)
         
         # Guardar imagen original
@@ -317,36 +335,141 @@ class PhotoboothGUI:
         
         # Guardar imagen modificada
         image.save(filepath)
-        print(f"Foto guardada como {filepath}")
+        print(f"Foto {self.photos_taken + 1} guardada como {filepath}")
         
         # Convertir la imagen para mostrarla en pygame
         pygame_image = pygame.image.load(filepath)
         pygame_image = pygame.transform.scale(pygame_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
         
-        self.last_photo = pygame_image
+        # Agregar a la lista de fotos tomadas
+        self.taken_photos.append(pygame_image)
+        self.photos_taken += 1
+        
         return filepath
     
-    def print_photo(self, filepath):
-        """Envía la foto a la impresora en un hilo separado."""
+    def create_composite_image(self):
+        """Crea una imagen compuesta con las 3 fotos en una sola hoja."""
+        try:
+            # Cargar las 3 imágenes individuales
+            images = []
+            for i in range(TOTAL_PHOTOS):
+                photo_path = f"photobooth_{self.session_timestamp}_foto{i+1}.jpg"
+                full_path = os.path.join(SAVE_DIR, photo_path)
+                if os.path.exists(full_path):
+                    img = Image.open(full_path)
+                    images.append(img)
+                else:
+                    print(f"No se encontró la imagen: {full_path}")
+                    return None
+            
+            if len(images) != TOTAL_PHOTOS:
+                print("No se pudieron cargar todas las imágenes")
+                return None
+            
+            # Obtener dimensiones de las imágenes (asumiendo que todas son iguales)
+            img_width, img_height = images[0].size
+            
+            # Configuración para la disposición
+            spacing = COMPOSITE_SPACING
+            margin = COMPOSITE_MARGIN
+            header_height = 50 if COMPOSITE_ADD_HEADER else 0
+            
+            # Calcular dimensiones según el layout
+            if COMPOSITE_LAYOUT == 'horizontal':
+                # 3 fotos horizontalmente
+                composite_width = (img_width * TOTAL_PHOTOS) + (spacing * (TOTAL_PHOTOS - 1)) + 2 * margin
+                composite_height = img_height + 2 * margin + header_height
+            else:
+                # 3 fotos verticalmente (por defecto)
+                composite_width = img_width + 2 * margin
+                composite_height = (img_height * TOTAL_PHOTOS) + (spacing * (TOTAL_PHOTOS - 1)) + 2 * margin + header_height
+            
+            # Crear imagen compuesta con fondo blanco
+            composite = Image.new('RGB', (composite_width, composite_height), 'white')
+            
+            # Agregar texto en la parte superior (si está habilitado)
+            text_height_used = 0
+            if COMPOSITE_ADD_HEADER:
+                try:
+                    draw = ImageDraw.Draw(composite)
+                    
+                    # Intentar usar una fuente del sistema
+                    try:
+                        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
+                    except:
+                        try:
+                            font = ImageFont.truetype("arial.ttf", 24)
+                        except:
+                            font = ImageFont.load_default()
+                    
+                    # Texto en la parte superior
+                    header_text = f"Fotomatón - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+                    text_bbox = draw.textbbox((0, 0), header_text, font=font)
+                    text_width = text_bbox[2] - text_bbox[0]
+                    text_x = (composite_width - text_width) // 2
+                    
+                    draw.text((text_x, 10), header_text, fill='black', font=font)
+                    text_height_used = header_height
+                    
+                except Exception as e:
+                    print(f"No se pudo agregar texto al compuesto: {e}")
+                    text_height_used = 0
+            
+            # Colocar las fotos según el layout
+            if COMPOSITE_LAYOUT == 'horizontal':
+                # Disposición horizontal
+                x_position = margin
+                y_position = margin + text_height_used
+                for i, img in enumerate(images):
+                    composite.paste(img, (x_position, y_position))
+                    x_position += img_width + spacing
+            else:
+                # Disposición vertical (por defecto)
+                x_position = margin
+                y_position = margin + text_height_used
+                for i, img in enumerate(images):
+                    composite.paste(img, (x_position, y_position))
+                    y_position += img_height + spacing
+            
+            # Guardar la imagen compuesta
+            composite_filename = f"photobooth_{self.session_timestamp}_compuesta.jpg"
+            composite_path = os.path.join(SAVE_DIR, composite_filename)
+            composite.save(composite_path, 'JPEG', quality=95)
+            
+            print(f"Imagen compuesta creada: {composite_path}")
+            print(f"Dimensiones: {composite_width}x{composite_height} - Layout: {COMPOSITE_LAYOUT}")
+            return composite_path
+            
+        except Exception as e:
+            print(f"Error al crear imagen compuesta: {e}")
+            return None
+
+    def print_photos(self):
+        """Crea una imagen compuesta y la envía a la impresora."""
         if not self.printer_name or not self.conn:
-            print("Sistema de impresión no disponible. La foto se guardará sin imprimir.")
+            print("Sistema de impresión no disponible. Las fotos se guardarán sin imprimir.")
             return False
         
-        def print_job():
+        def print_composite():
             try:
-                print(f"Imprimiendo foto: {filepath}")
-                job_id = self.conn.printFile(
-                    self.printer_name, 
-                    filepath, 
-                    "Photobooth Image", 
-                    {}
-                )
-                print(f"Trabajo de impresión enviado. ID: {job_id}")
+                # Crear imagen compuesta
+                composite_path = self.create_composite_image()
+                if composite_path and os.path.exists(composite_path):
+                    print(f"Imprimiendo imagen compuesta: {composite_path}")
+                    job_id = self.conn.printFile(
+                        self.printer_name, 
+                        composite_path, 
+                        "Photobooth Composite", 
+                        {}
+                    )
+                    print(f"Trabajo de impresión enviado. ID: {job_id}")
+                else:
+                    print("No se pudo crear la imagen compuesta para imprimir")
             except Exception as e:
-                print(f"Error al imprimir: {e}")
+                print(f"Error al imprimir imagen compuesta: {e}")
         
         # Iniciar la impresión en un hilo separado para no bloquear la interfaz
-        print_thread = threading.Thread(target=print_job)
+        print_thread = threading.Thread(target=print_composite)
         print_thread.daemon = True
         print_thread.start()
     
@@ -354,14 +477,22 @@ class PhotoboothGUI:
         """Bucle de detección de monedas en un hilo separado."""
         while self.running:
             if self.current_state == "waiting_coin" and GPIO.input(COIN_PIN) == GPIO.HIGH:
-                print("¡Moneda detectada!")
+                print("¡Moneda detectada! Iniciando secuencia de 3 fotos...")
                 GPIO.output(LED_PIN, GPIO.HIGH)  # Encender LED
-                self.current_state = "countdown"
-                self.countdown_value = COUNTDOWN_TIME
+                self.start_photo_sequence()
                 # Esperar un momento para evitar rebotes
                 time.sleep(0.2)
                 GPIO.output(LED_PIN, GPIO.LOW)  # Apagar LED
             time.sleep(0.1)  # Pequeña pausa para no saturar la CPU
+    
+    def start_photo_sequence(self):
+        """Inicia la secuencia de 3 fotos."""
+        self.current_state = "initial_countdown"
+        self.countdown_value = INITIAL_COUNTDOWN_TIME
+        self.photos_taken = 0
+        self.taken_photos = []
+        self.session_timestamp = None
+        self.current_photo_countdown = 0
     
     def draw_waiting_screen(self):
         """Dibuja la pantalla de espera de moneda."""
@@ -409,8 +540,8 @@ class PhotoboothGUI:
         # Dibujar el marco por encima de todo
         self.draw_frame()
     
-    def draw_countdown_screen(self):
-        """Dibuja la pantalla de cuenta regresiva."""
+    def draw_initial_countdown_screen(self):
+        """Dibuja la pantalla de cuenta regresiva inicial (5 segundos)."""
         self.screen.fill(BLACK)
         
         # Mostrar vista previa de la cámara
@@ -427,47 +558,127 @@ class PhotoboothGUI:
         self.screen.blit(text, text_rect)
         
         # Texto preparativo
-        if self.countdown_value > COUNTDOWN_TIME / 2:
-            prep_text = "Mira al pajarito!"
-        elif self.countdown_value > COUNTDOWN_TIME / 4:
+        if self.countdown_value > INITIAL_COUNTDOWN_TIME / 2:
+            prep_text = "¡Prepárate!"
+        elif self.countdown_value > INITIAL_COUNTDOWN_TIME / 4:
             prep_text = "SONRÍE!"
         else:
-            prep_text = "¡FOTO!"
+            prep_text = "¡PRIMERA FOTO!"
             
         prep_render = self.font_medium.render(prep_text, True, WHITE)
         prep_rect = prep_render.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 150))
         self.screen.blit(prep_render, prep_rect)
         
+        # Información de sesión
+        info_text = f"SESIÓN DE 3 FOTOS - FOTO 1/{TOTAL_PHOTOS}"
+        info_render = self.font_small.render(info_text, True, YELLOW)
+        info_rect = info_render.get_rect(center=(SCREEN_WIDTH//2, 100))
+        self.screen.blit(info_render, info_rect)
+        
         # Dibujar el marco por encima de todo
         self.draw_frame()
     
-    def draw_photo_screen(self):
-        """Dibuja la pantalla con la foto tomada."""
+    def draw_taking_photos_screen(self):
+        """Dibuja la pantalla durante la toma de fotos 2 y 3."""
         self.screen.fill(BLACK)
         
-        if self.last_photo:
-            self.screen.blit(self.last_photo, (0, 0))
+        # Mostrar vista previa de la cámara
+        camera_frame = self.get_camera_frame()
+        if camera_frame:
+            self.screen.blit(camera_frame, (0, 0))
+        
+        # Círculo de cuenta regresiva más pequeño
+        pygame.draw.circle(self.screen, WHITE, (SCREEN_WIDTH//2, SCREEN_HEIGHT//2), 80, 5)
+        
+        # Número de cuenta regresiva
+        text = self.font_large.render(str(self.current_photo_countdown), True, GREEN)
+        text_rect = text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2))
+        self.screen.blit(text, text_rect)
+        
+        # Texto indicativo
+        if self.current_photo_countdown > 1:
+            prep_text = f"Siguiente foto en..."
+        else:
+            prep_text = f"¡FOTO {self.photos_taken + 1}!"
             
-            # Texto indicativo
-            if self.printer_name and self.conn:
-                text = self.font_small.render("¡Tu foto está siendo impresa!", True, WHITE)
-            else:
-                text = self.font_small.render("¡Gracias!", True, WHITE)
+        prep_render = self.font_medium.render(prep_text, True, WHITE)
+        prep_rect = prep_render.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 150))
+        self.screen.blit(prep_render, prep_rect)
+        
+        # Información de progreso
+        progress_text = f"FOTO {self.photos_taken + 1}/{TOTAL_PHOTOS}"
+        progress_render = self.font_small.render(progress_text, True, YELLOW)
+        progress_rect = progress_render.get_rect(center=(SCREEN_WIDTH//2, 100))
+        self.screen.blit(progress_render, progress_rect)
+        
+        # Mostrar miniaturas de fotos ya tomadas en la parte inferior
+        if self.taken_photos:
+            mini_y = SCREEN_HEIGHT - 150
+            mini_width = 120
+            mini_height = 80
+            spacing = 20
+            start_x = SCREEN_WIDTH//2 - (len(self.taken_photos) * (mini_width + spacing) - spacing)//2
+            
+            for i, photo in enumerate(self.taken_photos):
+                mini_photo = pygame.transform.scale(photo, (mini_width, mini_height))
+                self.screen.blit(mini_photo, (start_x + i * (mini_width + spacing), mini_y))
                 
-            text_rect = text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT - 50))
-            
-            # Fondo semi-transparente para el texto
-            text_bg = pygame.Surface((text_rect.width + 20, text_rect.height + 10), pygame.SRCALPHA)
-            text_bg.fill((0, 0, 0, 180))
-            self.screen.blit(text_bg, (text_rect.x - 10, text_rect.y - 5))
-            self.screen.blit(text, text_rect)
+                # Marco blanco alrededor de la miniatura
+                pygame.draw.rect(self.screen, WHITE, 
+                               (start_x + i * (mini_width + spacing) - 2, mini_y - 2, 
+                                mini_width + 4, mini_height + 4), 2)
         
         # Dibujar el marco por encima de todo
         self.draw_frame()
     
-    def update_countdown(self):
-        """Actualiza el valor de la cuenta regresiva."""
-        if self.current_state == "countdown":
+    def draw_show_photos_screen(self):
+        """Dibuja la pantalla con las 3 fotos tomadas."""
+        self.screen.fill(BLACK)
+        
+        if len(self.taken_photos) >= 3:
+            # Mostrar las 3 fotos en una disposición 1x3 horizontal
+            photo_width = SCREEN_WIDTH // 3 - 20
+            photo_height = int(photo_width * 0.75)  # Relación de aspecto 4:3
+            start_y = (SCREEN_HEIGHT - photo_height) // 2
+            
+            for i, photo in enumerate(self.taken_photos):
+                x_pos = 10 + i * (photo_width + 10)
+                scaled_photo = pygame.transform.scale(photo, (photo_width, photo_height))
+                self.screen.blit(scaled_photo, (x_pos, start_y))
+                
+                # Marco blanco alrededor de cada foto
+                pygame.draw.rect(self.screen, WHITE, 
+                               (x_pos - 2, start_y - 2, photo_width + 4, photo_height + 4), 3)
+                
+                # Número de foto
+                num_text = self.font_small.render(f"{i+1}", True, WHITE)
+                self.screen.blit(num_text, (x_pos + 10, start_y + 10))
+        
+        # Texto indicativo
+        if self.printer_name and self.conn:
+            text = self.font_medium.render("¡Tus 3 fotos se están imprimiendo en una hoja!", True, GREEN)
+        else:
+            text = self.font_medium.render("¡Sesión completada! 3 fotos guardadas", True, GREEN)
+            
+        text_rect = text.get_rect(center=(SCREEN_WIDTH//2, 100))
+        
+        # Fondo semi-transparente para el texto
+        text_bg = pygame.Surface((text_rect.width + 40, text_rect.height + 20), pygame.SRCALPHA)
+        text_bg.fill((0, 0, 0, 180))
+        self.screen.blit(text_bg, (text_rect.x - 20, text_rect.y - 10))
+        self.screen.blit(text, text_rect)
+        
+        # Mensaje adicional
+        thanks_text = self.font_small.render("¡Gracias por usar nuestro fotomatón!", True, WHITE)
+        thanks_rect = thanks_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT - 50))
+        self.screen.blit(thanks_text, thanks_rect)
+        
+        # Dibujar el marco por encima de todo
+        self.draw_frame()
+    
+    def update_initial_countdown(self):
+        """Actualiza la cuenta regresiva inicial (5 segundos)."""
+        if self.current_state == "initial_countdown":
             current_time = pygame.time.get_ticks()
             
             if not hasattr(self, 'last_countdown_time'):
@@ -483,20 +694,64 @@ class PhotoboothGUI:
                 pygame.time.delay(100)
                 GPIO.output(LED_PIN, GPIO.LOW)
                 
-                # Si la cuenta llega a cero, tomar foto
+                # Si la cuenta llega a cero, tomar primera foto
                 if self.countdown_value <= 0:
+                    self.take_first_photo()
+    
+    def take_first_photo(self):
+        """Toma la primera foto y configura para las siguientes."""
+        # Flash effect
+        self.screen.fill(WHITE)
+        pygame.display.flip()
+        pygame.time.delay(100)
+        
+        # Tomar primera foto
+        filepath = self.take_photo()
+        if filepath:
+            print("Primera foto tomada!")
+            
+        # Cambiar al estado de tomar más fotos
+        self.current_state = "taking_photos"
+        self.current_photo_countdown = BETWEEN_PHOTOS_TIME
+        self.last_photo_countdown_time = pygame.time.get_ticks()
+    
+    def update_photo_sequence(self):
+        """Actualiza la secuencia de fotos 2 y 3."""
+        if self.current_state == "taking_photos":
+            current_time = pygame.time.get_ticks()
+            
+            # Actualizar cada segundo
+            if current_time - self.last_photo_countdown_time >= 1000:
+                self.current_photo_countdown -= 1
+                self.last_photo_countdown_time = current_time
+                
+                # Parpadear LED
+                GPIO.output(LED_PIN, GPIO.HIGH)
+                pygame.time.delay(50)
+                GPIO.output(LED_PIN, GPIO.LOW)
+                
+                # Si la cuenta llega a cero, tomar foto
+                if self.current_photo_countdown <= 0:
                     # Flash effect
                     self.screen.fill(WHITE)
                     pygame.display.flip()
                     pygame.time.delay(100)
                     
-                    # Tomar y mostrar foto
+                    # Tomar foto
                     filepath = self.take_photo()
                     if filepath:
-                        self.print_photo(filepath)
+                        print(f"Foto {self.photos_taken} tomada!")
                     
-                    self.current_state = "show_photo"
-                    self.photo_display_start = pygame.time.get_ticks()
+                    # Verificar si ya tomamos las 3 fotos
+                    if self.photos_taken >= TOTAL_PHOTOS:
+                        # Todas las fotos tomadas, mostrar resultado
+                        print("¡Sesión de 3 fotos completada!")
+                        self.print_photos()
+                        self.current_state = "show_photos"
+                        self.photo_display_start = pygame.time.get_ticks()
+                    else:
+                        # Preparar para la siguiente foto
+                        self.current_photo_countdown = BETWEEN_PHOTOS_TIME
     
     def run(self):
         """Bucle principal del programa."""
@@ -513,29 +768,36 @@ class PhotoboothGUI:
                             self.running = False
                         # Para pruebas: simular inserción de moneda con la tecla espacio
                         elif event.key == pygame.K_SPACE and self.current_state == "waiting_coin":
-                            self.current_state = "countdown"
-                            self.countdown_value = COUNTDOWN_TIME
+                            self.start_photo_sequence()
                 
                 # Actualizar estado
-                if self.current_state == "countdown":
-                    self.update_countdown()
-                elif self.current_state == "show_photo":
-                    # Mostrar la foto durante X segundos
+                if self.current_state == "initial_countdown":
+                    self.update_initial_countdown()
+                elif self.current_state == "taking_photos":
+                    self.update_photo_sequence()
+                elif self.current_state == "show_photos":
+                    # Mostrar las fotos durante X segundos
                     current_time = pygame.time.get_ticks()
                     if not hasattr(self, 'photo_display_start'):
                         self.photo_display_start = current_time
                     
-                    if current_time - self.photo_display_start >= 5000:  # 5 segundos
+                    if current_time - self.photo_display_start >= 8000:  # 8 segundos para ver las 3 fotos
                         self.current_state = "waiting_coin"
                         delattr(self, 'photo_display_start')
+                        # Limpiar variables para la siguiente sesión
+                        self.photos_taken = 0
+                        self.taken_photos = []
+                        self.session_timestamp = None
                 
                 # Dibujar pantalla según el estado actual
                 if self.current_state == "waiting_coin":
                     self.draw_waiting_screen()
-                elif self.current_state == "countdown":
-                    self.draw_countdown_screen()
-                elif self.current_state == "show_photo":
-                    self.draw_photo_screen()
+                elif self.current_state == "initial_countdown":
+                    self.draw_initial_countdown_screen()
+                elif self.current_state == "taking_photos":
+                    self.draw_taking_photos_screen()
+                elif self.current_state == "show_photos":
+                    self.draw_show_photos_screen()
                 
                 pygame.display.flip()
                 clock.tick(30)  # 30 FPS
